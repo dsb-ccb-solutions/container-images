@@ -1,0 +1,80 @@
+name: Cleanup ghcr docker images
+
+on:
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: "Dry-run?"
+        required: false
+        type: boolean
+        default: true
+      fixrepo:
+        description: "Fix repo?"
+        required: false
+        type: boolean
+        default: false
+      olderthan:
+        # he syntax supports the following units in the plural and singular forms:
+        # seconds, minutes, hours, days, weeks, months and years.
+        description: "Limit to images older than?"
+        required: false
+        type: string
+        default: "7 days"
+
+  schedule:
+    # run this every Sunday at 03:00 UTC
+    - cron: "0 3 * * 0"
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Processing parameters
+        id: parameters
+        run: |
+          DRYRUN="true"
+          FIXREPO="false"
+          OLDERTHAN="7 days"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ github.event.inputs.dryrun }}" == "false" ]]; then
+              DRYRUN="false"
+            fi
+            if [[ "${{ github.event.inputs.fixrepo }}" == "true" ]]; then
+              FIXREPO="true"
+            fi
+            if [[ "${{ github.event.inputs.olderthan }}" != "" ]]; then
+              OLDERTHAN="${{ github.event.inputs.olderthan }}"
+            fi
+          fi
+          echo "Parameter DRYRUN: $DRYRUN"
+          echo "DRYRUN=$DRYRUN" >> $GITHUB_OUTPUT
+          echo "Parameter FIXREPO: $FIXREPO"
+          echo "FIXREPO=$FIXREPO" >> $GITHUB_OUTPUT
+          echo "Parameter OLDERTHAN: $OLDERTHAN"
+          echo "OLDERTHAN=$OLDERTHAN" >> $GITHUB_OUTPUT
+
+      - name: Cleanup images
+        id: cleanup
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          packages: container-images/devcontainer-ubuntu,container-images/ci-ubuntu
+          delete-tags: sha-*
+          exclude-tags: latest,edge,*.*.*
+          older-than: ${{ steps.parameters.outputs.OLDERTHAN }}
+          delete-untagged: true
+          validate: true
+          dry-run: ${{ steps.parameters.outputs.DRYRUN == 'true'}}
+
+      - name: Fix repo (only when run manually)
+        if: ${{ steps.parameters.outputs.FIXREPO == 'true' }}
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          packages: container-images/devcontainer-ubuntu,container-images/ci-ubuntu
+          delete-ghost-images: true
+          delete-partial-images: true
+          delete-orphaned-images: true
+          dry-run: ${{ steps.parameters.outputs.DRYRUN == 'true'}}

@@ -1,0 +1,13 @@
+# set default for all text files to LF
+* text=auto eol=lf
+# files are always case sensitive
+* casesensitive=true
+
+# batch scripts always have CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# shell scripts always have LF
+*.sh text eol=lf
+

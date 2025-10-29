@@ -1,0 +1,90 @@
+version: "3"
+
+vars:
+  # To build for a single architecture, run for example:
+  # task build:base:ubuntu ARCHS=linux/amd64
+  # To pass the mise_github_token secret, set the env var MISE_GITHUB_TOKEN before running the build.
+  ARCHS: '{{.ARCHS | default "linux/amd64,linux/arm64"}}'
+  VERSION: '{{.VERSION | default "local"}}'
+
+tasks:
+  check:github-token:
+    desc: Ensure MISE_GITHUB_TOKEN is set
+    cmds:
+      - |
+        if [ -z "$MISE_GITHUB_TOKEN" ]; then
+          echo "\033[0;31mERROR: MISE_GITHUB_TOKEN is not set.\033[0m"
+          echo "Please set it with: export MISE_GITHUB_TOKEN=your_token_here"
+          exit 1
+        fi
+
+  lint:
+    desc: Run hadolint linter
+    cmds:
+      - docker run --rm -i hadolint/hadolint < ./src/ubuntu/Dockerfile
+      - echo "Linting successful."
+
+  build:base:ubuntu:
+    desc: Build the base Ubuntu image (multi-arch, override ARCHS for single arch)
+    deps:
+      - check:github-token
+    cmds:
+      - |
+        docker buildx build \
+          --platform {{.ARCHS}} \
+          --build-arg CONTAINER_VERSION={{.VERSION}} \
+          --secret id=mise_github_token,env=MISE_GITHUB_TOKEN \
+          -t dsb-ccb-solutions/container-images/base-ubuntu:{{.VERSION}} \
+          --target base \
+          --load \
+          --progress=plain \
+          ./src/ubuntu
+
+  build:devcontainer:ubuntu:
+    desc: Build the devcontainer Ubuntu image (multi-arch, override ARCHS for single arch)
+    deps:
+      - check:github-token
+    cmds:
+      - |
+        docker buildx build \
+        --platform {{.ARCHS}} \
+        --build-arg CONTAINER_VERSION={{.VERSION}} \
+        --secret id=mise_github_token,env=MISE_GITHUB_TOKEN \
+        -t dsb-ccb-solutions/container-images/devcontainer-ubuntu:{{.VERSION}} \
+        --target devcontainer \
+        --load \
+        --progress=plain \
+        ./src/ubuntu
+
+  build:ci:ubuntu:
+    desc: Build the CI Ubuntu image (multi-arch, override ARCHS for single arch)
+    deps:
+      - check:github-token
+    cmds:
+      - |
+        docker buildx build \
+          --platform {{.ARCHS}} \
+          --build-arg CONTAINER_VERSION={{.VERSION}} \
+          --secret id=mise_github_token,env=MISE_GITHUB_TOKEN \
+          -t dsb-ccb-solutions/container-images/ci-ubuntu:{{.VERSION}} \
+          --target ci \
+          --load \
+          --progress=plain \
+          ./src/ubuntu
+
+  build:all:ubuntu:
+    desc: Build all Ubuntu container images (base, devcontainer, ci)
+    deps:
+      - build:base:ubuntu
+      - build:devcontainer:ubuntu
+      - build:ci:ubuntu
+
+  build:all:
+    desc: Build all container images
+    deps:
+      - build:all:ubuntu
+
+  default:
+    desc: Build all container images (default)
+    cmds:
+      - task: build:all

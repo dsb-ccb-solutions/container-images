@@ -1,0 +1,140 @@
+# Build and (conditionally) push ubuntu container images
+#
+# PRs              -> build image only, do not push
+# push to main     -> build and push image with edge + SHA1 tags
+# push version tag -> build and push image with vX.Y.Z, latest, edge + SHA1 tags
+# manual dispatch  -> push image only if push_image=true is selected
+#
+name: Ubuntu images
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Which platforms to build?"
+        required: false
+        type: string
+        default: "linux/amd64,linux/arm64"
+      push_image:
+        description: "Push image after build?"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  PLATFORMS: linux/amd64,linux/arm64
+
+jobs:
+  build-and-push:
+    strategy:
+      fail-fast: true
+      matrix:
+        build_target:
+          - { name: "devcontainer" }
+          - { name: "ci" }
+    runs-on: ubuntu-latest
+    name: ${{ matrix.build_target.name }}-ubuntu
+    permissions:
+      contents: read
+      # allow this workflow to deploy container images/packages
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.build_target.name }}-ubuntu
+          # generate tags for image
+          # - version + "latest" when worflow was triggered via create tag event (release)
+          # - 'edge' for the last commit in the active branch
+          # - (short) sha commit always
+          tags: |
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+            type=edge
+            type=sha
+
+      - name: Determine build settings
+        id: determine_build_settings
+        run: |
+          # set defaults
+          VERSION="${{ github.sha }}"
+          SHOULD_PUSH="false"
+
+          if [ -n "${{ steps.meta.outputs.version }}" ]; then
+            # if docker/metadata-action has already determined a version, use that instead of the commit sha
+            VERSION="${{ steps.meta.outputs.version }}"
+          fi
+          echo "Determined VERSION: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+          # Rules for pushing the image
+          # 1. Push to the main branch => push with 'edge' tag (and sha)
+          # 2. Creation of o version tag/release => push with version and 'latest' tag (and sha)
+          # 3. Manual workflow-dispatch => push only when requested
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]] || \
+             [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]] || \
+             [[ "${{ github.event.inputs.push_image }}" == "true" ]] ; then
+            SHOULD_PUSH="true"
+          fi
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]] ; then
+            SEMVER_REGEX="^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$"
+            if [[ "${{ github.ref_name }}" =~ $SEMVER_REGEX ]]; then
+              SHOULD_PUSH="true"
+            else
+              echo "❌ ERROR: Tag '${{ github.ref_name }}' is not a valid semver."
+              exit 1
+            fi
+          fi
+
+          echo "Determined SHOULD_PUSH: $SHOULD_PUSH"
+          echo "SHOULD_PUSH=$SHOULD_PUSH" >> $GITHUB_OUTPUT
+
+          # also print the generated tags, so we have all relevant information in one place
+          echo "Tags from docker/metadata-action: ${{ steps.meta.outputs.tags }}"
+
+          # which image platform should be built
+          if [ -n "${{ github.event.inputs.platforms }}" ]; then
+            echo "PLATFORMS=${{ github.event.inputs.platforms }}" >> $GITHUB_ENV
+          fi
+
+      - name: Build and push images
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/ubuntu
+          target: ${{ matrix.build_target.name }}
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ steps.determine_build_settings.outputs.SHOULD_PUSH }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          secrets: |
+            mise_github_token=${{ secrets.GITHUB_TOKEN }}
+          # add version to build args
+          build-args: |
+            CONTAINER_VERSION=${{ steps.determine_build_settings.outputs.VERSION }}

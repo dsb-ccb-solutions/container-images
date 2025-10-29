@@ -1,0 +1,52 @@
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Docker-related
+.dockerignore.local
+docker-compose.override.yml
+.docker/
+
+# mise local files
+.mise.toml.local
+.mise/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.secret
+secrets/
+
+# Build artifacts and temporary files
+*.log
+*.tmp
+.cache/
+build/
+dist/
+
+# Task runner
+.task/
+
+# Temporary files
+*.bak
+*.orig
+*.rej
