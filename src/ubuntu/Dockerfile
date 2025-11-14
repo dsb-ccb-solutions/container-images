@@ -65,6 +65,12 @@ RUN <<EOT
   git config --system init.defaultBranch main
   git config --system core.autocrlf input
   git config --system core.safecrlf warn
+  git config --system alias.co "checkout"
+  git config --system alias.lg "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative"
+  git config --system alias.pcb "push -u origin HEAD"
+  git config --system alias.undo-last-commit "reset --soft HEAD^"
+  git config --system alias.up '!git remote update -p; git merge --ff-only @{u}'
+  git config --system alias.uprebase "rebase --rebase-merges @{u}"
 # use mise shims for all non-interactive shells
   echo 'eval "$(mise activate bash --shims)"' > /etc/profile.d/mise.sh
   chmod 644 /etc/profile.d/mise.sh
@@ -79,10 +85,15 @@ SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
 RUN <<EOT
 # restore manpages
-yes | unminimize || true
+  yes | unminimize || true
+# git - use delta as pager and diff filter
+  git config --global core.pager delta
+  git config --global interactive.diffFilter 'delta --color-only'
+  git config --global delta.navigate true
+  git config --system merge.conflictStyle zdiff3
 # append version and build date to /etc/motd
- cat > /etc/motd <<EOF
- devcontainer-ubuntu [${CONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
+  cat > /etc/motd <<EOF
+devcontainer-ubuntu [${CONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
 EOF
 EOT
 
@@ -116,18 +127,6 @@ EOT
 # hadolint ignore=SC2016
 RUN <<EOT
   eval "$(mise activate bash)"
-# user-global git configuration
-  git config --global core.pager delta
-  git config --global interactive.diffFilter 'delta --color-only'
-  git config --global delta.navigate true
-  git config --global merge.conflictStyle zdiff3
-# user-global git aliases
-  git config --global alias.co "checkout"
-  git config --global alias.lg "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative"
-  git config --global alias.pcb "push -u origin HEAD"
-  git config --global alias.undo-last-commit "reset --soft HEAD^"
-  git config --global alias.up '!git remote update -p; git merge --ff-only @{u}'
-  git config --global alias.uprebase "rebase --rebase-merges @{u}"
 # starship prompt (https://starship.rs)
   starship config add_newline true
   starship config command_timeout 2000
@@ -174,7 +173,7 @@ SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 RUN <<EOT
 # append version and build date to /etc/motd
   cat > /etc/motd <<EOF
-  ci-ubuntu [${CONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
+ci-ubuntu [${CONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
 EOF
   export DEBIAN_FRONTEND=noninteractive
 # install docker-ce-cli (needed to build images in ci pipelines)
