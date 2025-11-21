@@ -129,7 +129,7 @@ RUN <<EOT
   eval "$(mise activate bash)"
 # starship prompt (https://starship.rs)
   starship config add_newline true
-  starship config command_timeout 2000
+  starship config command_timeout 4000
   starship config hostname.ssh_only false
   starship config username.show_always true
   starship config username.format '[$user]($style)@'
