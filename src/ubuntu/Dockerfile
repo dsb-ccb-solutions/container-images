@@ -30,9 +30,11 @@ RUN <<EOT
   # wget -qO - https://mise.jdx.dev/gpg-key.pub | gpg --dearmor | tee /etc/apt/keyrings/mise-archive-keyring.gpg 1> /dev/null
   curl -fsSL https://mise.jdx.dev/gpg-key.pub | gpg --dearmor -o /etc/apt/keyrings/mise-archive-keyring.gpg
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.jdx.dev/deb stable main" | tee /etc/apt/sources.list.d/mise.list > /dev/null
-# install base tooling
   apt-get update && apt-get install -y --no-install-recommends \
-    mise \
+    mise=2025.11.8
+  echo "Mise installed."
+# install base tooling
+  apt-get install -y --no-install-recommends \
     build-essential \
     sudo htop less bash-completion \
     bash zsh fish \
